@@ -84,6 +84,18 @@ export async function getBotInfo(env) {
   return res.json();
 }
 
+async function saveContact(env, userId, now) {
+  const profile = await getProfile(env, userId);
+  await env.DB.prepare(
+    `INSERT INTO contacts (line_user_id, line_display_name, created_at) VALUES (?, ?, ?)
+     ON CONFLICT(line_user_id) DO UPDATE SET blocked = 0,
+       line_display_name = COALESCE(excluded.line_display_name, line_display_name)`,
+  )
+    .bind(userId, profile?.displayName ?? null, now)
+    .run();
+  return profile;
+}
+
 export async function handleWebhook(request, env) {
   const raw = await request.text();
   if (!(await verifySignature(env, raw, request.headers.get('x-line-signature')))) {
@@ -97,14 +109,7 @@ export async function handleWebhook(request, env) {
     if (!userId) continue;
 
     if (ev.type === 'follow') {
-      const profile = await getProfile(env, userId);
-      await env.DB.prepare(
-        `INSERT INTO contacts (line_user_id, line_display_name, created_at) VALUES (?, ?, ?)
-         ON CONFLICT(line_user_id) DO UPDATE SET blocked = 0,
-           line_display_name = COALESCE(excluded.line_display_name, line_display_name)`,
-      )
-        .bind(userId, profile?.displayName ?? null, now)
-        .run();
+      const profile = await saveContact(env, userId, now);
       await replyText(
         env,
         ev.replyToken,
@@ -113,7 +118,16 @@ export async function handleWebhook(request, env) {
     } else if (ev.type === 'unfollow') {
       await env.DB.prepare('UPDATE contacts SET blocked = 1 WHERE line_user_id = ?').bind(userId).run();
     } else if (ev.type === 'message') {
-      await replyText(env, ev.replyToken, '我只負責傳送提醒，沒辦法回覆訊息喔 🙏');
+      // 萬一加好友當下沒收到通知，傳任何訊息也能補登記
+      const known = await env.DB.prepare('SELECT id FROM contacts WHERE line_user_id = ? AND blocked = 0')
+        .bind(userId)
+        .first();
+      if (known) {
+        await replyText(env, ev.replyToken, '我只負責傳送提醒，沒辦法回覆訊息喔 🙏');
+      } else {
+        await saveContact(env, userId, now);
+        await replyText(env, ev.replyToken, `已經登記好了！之後 ${env.OWNER_NAME || 'froglssh'} 設定的提醒會傳到這裡 ⏰`);
+      }
     }
   }
   return new Response('ok');
