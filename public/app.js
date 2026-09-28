@@ -4,7 +4,7 @@ const $ = (sel) => document.querySelector(sel);
 const TZ = 'Asia/Taipei';
 
 const state = {
-  ownerName: 'Papaya',
+  ownerName: 'froglssh',
   reminders: [],
   contacts: [],
 };

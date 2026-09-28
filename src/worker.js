@@ -95,7 +95,7 @@ async function handleApi(request, env, url) {
   if (!(await isLoggedIn(request, env))) return json({ error: '請先登入' }, 401);
 
   if (pathname === '/api/me' && method === 'GET') {
-    return json({ ownerName: env.OWNER_NAME || 'Papaya', lineReady: !!env.LINE_CHANNEL_ACCESS_TOKEN });
+    return json({ ownerName: env.OWNER_NAME || 'froglssh', lineReady: !!env.LINE_CHANNEL_ACCESS_TOKEN });
   }
 
   if (pathname === '/api/reminders' && method === 'GET') return json(await listReminders(env));
