@@ -4,6 +4,8 @@
   "name": "line-voice-reminder",
   "main": "src/worker.js",
   "compatibility_date": "2025-09-01",
+  // 保留在 Cloudflare 後台手動加的變數，避免每次更新程式時被清掉
+  "keep_vars": true,
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",

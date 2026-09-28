@@ -82,7 +82,7 @@ async function showApp() {
 
 $('#login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const btn = e.submitter;
+  const btn = e.submitter || e.target.querySelector('button[type=submit]');
   btn.disabled = true;
   $('#login-error').textContent = '';
   try {
@@ -185,7 +185,7 @@ $('#add-panel').addEventListener('toggle', () => {
 
 $('#add-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const btn = e.submitter;
+  const btn = e.submitter || e.target.querySelector('button[type=submit]');
   btn.disabled = true;
   $('#add-error').textContent = '';
   try {
