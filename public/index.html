@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>提醒小幫手</title>
+  <meta name="description" content="用說的建立提醒，時間到自動傳到 LINE">
+  <meta name="theme-color" content="#faf8f5" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#141414" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="提醒小幫手">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <!-- 登入畫面 -->
+  <main id="login-view" class="view login" hidden>
+    <form id="login-form" class="login-card" autocomplete="on">
+      <img src="/icons/icon-192.png" alt="" class="login-icon" width="72" height="72">
+      <h1>提醒小幫手</h1>
+      <p class="muted">請輸入密碼</p>
+      <input type="text" name="username" value="papaya" autocomplete="username" hidden>
+      <input id="password" type="password" name="password" placeholder="密碼" autocomplete="current-password" required>
+      <button type="submit" class="btn primary block">登入</button>
+      <p id="login-error" class="error" role="alert"></p>
+    </form>
+  </main>
+
+  <!-- 主畫面 -->
+  <div id="app-view" class="view" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <img src="/icons/icon-192.png" alt="" width="28" height="28">
+        <span>提醒小幫手</span>
+      </div>
+      <button id="logout" class="btn ghost small">登出</button>
+    </header>
+
+    <section class="hero">
+      <button id="mic" class="mic" aria-label="開始語音對話" aria-pressed="false">
+        <span class="mic-ring"></span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
+      </button>
+      <p id="mic-status" class="mic-status">按一下，用說的建立提醒</p>
+    </section>
+
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="reminders" aria-selected="true">提醒</button>
+      <button role="tab" data-tab="contacts" aria-selected="false">聯絡人</button>
+    </nav>
+
+    <main class="content">
+      <section id="tab-reminders" class="tab-panel">
+        <details id="add-panel" class="card add-panel">
+          <summary>＋ 用打字新增提醒</summary>
+          <form id="add-form" class="add-form">
+            <label>提醒內容
+              <input id="add-message" type="text" maxlength="500" placeholder="例如：繳信用卡卡費" required>
+            </label>
+            <label>提醒誰
+              <select id="add-contact" required></select>
+            </label>
+            <label>時間
+              <input id="add-due" type="datetime-local" required>
+            </label>
+            <button type="submit" class="btn primary">建立提醒</button>
+            <p id="add-error" class="error" role="alert"></p>
+          </form>
+        </details>
+
+        <div id="reminder-groups"></div>
+      </section>
+
+      <section id="tab-contacts" class="tab-panel" hidden>
+        <div class="card invite">
+          <h2>邀請加入</h2>
+          <p class="muted">收提醒的人（包括您自己）都要先把提醒小幫手加為 LINE 好友。</p>
+          <div id="invite-body" class="invite-body"><p class="muted">載入中…</p></div>
+        </div>
+        <h2 class="section-title">聯絡人</h2>
+        <div id="contact-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <template id="empty-contacts">
+    <p class="empty">還沒有人加入。請先用上方的 QR Code 把提醒小幫手加為 LINE 好友。</p>
+  </template>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
