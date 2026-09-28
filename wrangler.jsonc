@@ -1,7 +1,7 @@
 {
   // Cloudflare Worker 設定檔：網頁、API、LINE webhook、每分鐘排程都在同一個 Worker
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "froglssh-reminder",
+  "name": "line-voice-reminder",
   "main": "src/worker.js",
   "compatibility_date": "2025-09-01",
   "assets": {
