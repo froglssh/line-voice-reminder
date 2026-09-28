@@ -168,6 +168,19 @@ input:focus, select:focus { border-color: var(--accent); background: var(--surfa
 @media (prefers-reduced-motion: reduce) {
   .mic[aria-pressed="true"] .mic-ring { animation: none; opacity: 0.5; }
 }
+.caption {
+  margin: -8px 0 0;
+  max-width: 480px;
+  min-height: 1.5em;
+  text-align: center;
+  font-size: 1rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.caption[data-who="user"] { color: var(--muted); }
+.caption[data-who="user"]::before { content: "你："; }
+.mic[data-state="connecting"] { opacity: 0.75; }
+.mic[data-state="speaking"] .mic-ring { animation-duration: 0.9s; }
 .mic-status { margin: 0; color: var(--muted); font-size: 0.95rem; text-align: center; min-height: 1.5em; }
 
 .tabs {
