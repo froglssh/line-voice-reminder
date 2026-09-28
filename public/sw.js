@@ -1,5 +1,5 @@
 // 讓網頁可以「加到主畫面」。畫面檔案優先抓最新版，離線時才用暫存；API 一律不暫存。
-const CACHE = 'shell-v1';
+const CACHE = 'shell-v2';
 const SHELL = ['/', '/app.css', '/app.js', '/manifest.webmanifest', '/icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
