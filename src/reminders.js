@@ -6,7 +6,7 @@ const MAX_MESSAGE_LENGTH = 500;
 const MAX_FUTURE_MS = 5 * 365 * 24 * 60 * 60 * 1000;
 
 // 回傳 { reminder } 或 { error }
-export async function insertReminder(env, { message, contactId, dueAt }) {
+export async function insertReminder(env, { message, contactId, dueAt, imageKey = null }) {
   const text = String(message ?? '').trim();
   const now = Date.now();
 
@@ -21,9 +21,9 @@ export async function insertReminder(env, { message, contactId, dueAt }) {
   if (contact.blocked) return { error: '這位收件人已封鎖提醒小幫手，無法傳送' };
 
   const row = await env.DB.prepare(
-    'INSERT INTO reminders (message, contact_id, due_at, created_at) VALUES (?, ?, ?, ?) RETURNING *',
+    'INSERT INTO reminders (message, contact_id, due_at, created_at, image_key, status) VALUES (?, ?, ?, ?, ?, ?) RETURNING *',
   )
-    .bind(text, contactId, Math.round(dueAt), now)
+    .bind(text, contactId, Math.round(dueAt), now, imageKey, imageKey ? 'card' : 'pending')
     .first();
   row.contact_name = contact.name || contact.line_display_name;
   row.contact_is_self = contact.is_self;

@@ -127,27 +127,36 @@ function reminderItem(r) {
   const who = r.contactIsSelf ? '我' : r.contactName || '（已刪除的聯絡人）';
   const badge = {
     pending: '<span class="badge pending">等待中</span>',
+    card: '<span class="badge pending">等待中</span>',
     sending: '<span class="badge pending">傳送中</span>',
     sent: '<span class="badge sent">已送出</span>',
     failed: '<span class="badge failed">傳送失敗</span>',
   }[r.status];
   const when = r.status === 'sent' ? `送出於 ${formatTime(r.sentAt)}` : formatTime(r.dueAt);
   const canDelete = r.status !== 'sending';
+  const canSend = ['pending', 'card', 'failed'].includes(r.status);
+  const thumb = r.imageUrl
+    ? `<a class="thumb" href="${escapeHtml(r.imageUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(r.imageUrl)}" alt="賀卡圖片" loading="lazy"></a>`
+    : '';
   return `
     <article class="reminder ${r.status}">
+      ${thumb}
       <div class="reminder-main">
         <div class="reminder-msg">${escapeHtml(r.message)}</div>
         <div class="reminder-meta">${badge}<span>${escapeHtml(when)}</span><span>→ ${escapeHtml(who)}</span></div>
         ${r.status === 'failed' && r.lastError ? `<div class="reminder-error">${escapeHtml(r.lastError)}</div>` : ''}
-        ${r.status === 'pending' && r.lastError ? `<div class="reminder-error">上次沒送成功，稍後自動重試：${escapeHtml(r.lastError)}</div>` : ''}
+        ${(r.status === 'pending' || r.status === 'card') && r.lastError ? `<div class="reminder-error">上次沒送成功，稍後自動重試：${escapeHtml(r.lastError)}</div>` : ''}
       </div>
-      ${canDelete ? `<button class="icon-btn" data-delete="${r.id}" aria-label="刪除這則提醒" title="刪除">✕</button>` : ''}
+      <div class="reminder-actions">
+        ${canSend ? `<button class="icon-btn send" data-send="${r.id}" aria-label="現在送出" title="現在送出">➤</button>` : ''}
+        ${canDelete ? `<button class="icon-btn" data-delete="${r.id}" aria-label="刪除這則提醒" title="刪除">✕</button>` : ''}
+      </div>
     </article>`;
 }
 
 function renderReminders() {
   const groups = [
-    { title: '等待中', items: state.reminders.filter((r) => r.status === 'pending' || r.status === 'sending') },
+    { title: '等待中', items: state.reminders.filter((r) => ['pending', 'card', 'sending'].includes(r.status)) },
     { title: '傳送失敗', items: state.reminders.filter((r) => r.status === 'failed') },
     {
       title: '已送出（一週後自動刪除）',
@@ -162,10 +171,24 @@ function renderReminders() {
 }
 
 $('#reminder-groups').addEventListener('click', async (e) => {
+  const sendBtn = e.target.closest('[data-send]');
+  if (sendBtn) {
+    const r = state.reminders.find((x) => x.id === Number(sendBtn.dataset.send));
+    if (!confirm(`現在就把「${r?.message ?? ''}」傳出去嗎？`)) return;
+    sendBtn.disabled = true;
+    try {
+      await api(`/api/reminders/${sendBtn.dataset.send}/send`, { method: 'POST' });
+      toast('已送出');
+    } catch (err) {
+      toast(err.message);
+    }
+    await loadReminders().catch(() => {});
+    return;
+  }
   const btn = e.target.closest('[data-delete]');
   if (!btn) return;
   const r = state.reminders.find((x) => x.id === Number(btn.dataset.delete));
-  if (r?.status === 'pending' && !confirm(`確定要取消「${r.message}」這則提醒嗎？`)) return;
+  if ((r?.status === 'pending' || r?.status === 'card') && !confirm(`確定要取消「${r.message}」這則提醒嗎？`)) return;
   try {
     await api(`/api/reminders/${btn.dataset.delete}`, { method: 'DELETE' });
     await loadReminders();
@@ -306,6 +329,21 @@ async function loadInvite() {
 
 let voice = null;
 
+// AI 畫好的圖片先顯示在麥克風下方，讓使用者決定要不要重做
+function showCardPreview(card) {
+  const box = $('#card-preview');
+  if (!card) {
+    box.hidden = true;
+    box.innerHTML = '';
+    return;
+  }
+  box.hidden = false;
+  box.innerHTML = card.loading
+    ? '<div class="card-loading"><span class="spinner"></span>AI 畫圖中，大約十幾秒…</div>'
+    : `<a href="${escapeHtml(card.url)}" target="_blank" rel="noopener"><img src="${escapeHtml(card.url)}" alt="AI 畫好的賀卡"></a>
+       <p class="muted">滿意嗎？直接跟 AI 說「重做」、要改哪裡，或「就用這張」</p>`;
+}
+
 function setMicState(stateName, text) {
   const mic = $('#mic');
   mic.dataset.state = stateName;
@@ -315,6 +353,7 @@ function setMicState(stateName, text) {
   if (stateName === 'idle') {
     voice = null;
     $('#caption').textContent = '';
+    if ($('#card-preview .card-loading')) showCardPreview(null);
   }
 }
 
@@ -330,10 +369,27 @@ $('#mic').addEventListener('click', () => {
       el.dataset.who = who;
       el.textContent = text;
     },
+    onToolFailed: (name, error) => {
+      if (name === 'create_card_image') {
+        showCardPreview(null);
+        toast(error);
+      }
+    },
+    onToolStart: (name) => {
+      if (name === 'create_card_image') showCardPreview({ loading: true });
+    },
     onReminderChange: async (name, result) => {
+      if (name === 'create_card_image') {
+        showCardPreview({ url: result.image_url });
+        return;
+      }
       await loadReminders().catch(() => {});
       if (name === 'create_reminder' && result.reminder) {
         toast(`已建立：${result.reminder.due} 提醒${result.reminder.recipient}`);
+      }
+      if (name === 'schedule_card' && result.reminder) {
+        showCardPreview(null);
+        toast(`已排定：${result.reminder.due} 把賀卡傳給${result.reminder.recipient}`);
       }
       if (name === 'cancel_reminder') toast('已取消提醒');
     },

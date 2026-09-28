@@ -20,7 +20,7 @@ function fromBase64(b64) {
 }
 
 export class VoiceSession {
-  // callbacks: onState(state, text), onCaption(who, text), onReminderChange(), onError(message)
+  // callbacks: onState(state, text), onCaption(who, text), onToolStart(name), onReminderChange(name, result), onError(message)
   constructor(callbacks) {
     this.cb = callbacks;
     this.closed = false;
@@ -165,12 +165,14 @@ export class VoiceSession {
     const responses = await Promise.all(
       calls.map(async (call) => {
         let response;
+        this.cb.onToolStart?.(call.name);
         try {
           response = await this.api('/api/voice/tool', { name: call.name, args: call.args || {} });
         } catch (err) {
           response = { ok: false, error: err.message };
         }
         if (response.ok && call.name !== 'list_reminders') this.cb.onReminderChange(call.name, response);
+        else if (!response.ok) this.cb.onToolFailed?.(call.name, response.error);
         return { id: call.id, name: call.name, response };
       }),
     );

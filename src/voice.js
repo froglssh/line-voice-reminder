@@ -2,6 +2,7 @@
 // 正式的 GEMINI_API_KEY 只留在伺服器，瀏覽器只拿到 30 分鐘內有效、只能用一次、設定被鎖定的通行證。
 
 import { insertReminder } from './reminders.js';
+import { generateImage, imageExists } from './images.js';
 
 const TZ_OFFSET_MS = 8 * 60 * 60 * 1000; // 台灣沒有日光節約時間，固定 UTC+8
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
@@ -89,7 +90,7 @@ function describeContacts(contacts, ownerName) {
 // ---------- 給 AI 的指示 ----------
 
 function systemInstruction(ownerName, contacts, now) {
-  return `你是「${ownerName}」的個人語音提醒助理，工作是幫他建立 LINE 提醒。
+  return `你是「${ownerName}」的個人語音提醒助理，工作是幫他建立 LINE 提醒，也可以用 AI 畫圖片賀卡並定時傳給親友。
 請一律用台灣的繁體中文口語回答，語氣親切、簡短，每次回答盡量不超過兩句話。
 
 【開場】
@@ -114,8 +115,19 @@ ${describeContacts(contacts, ownerName)}
 6. 相對時間（例如「一個小時後」「30 分鐘後」）請用 in_minutes；其他時間請用 due_at，格式為「YYYY-MM-DD HH:mm」（台灣時間、24 小時制）。
 7. 建立成功後，簡短告訴使用者已經建立好，並問還有沒有其他要提醒的。建立失敗就說明原因。
 
+【圖片賀卡】
+使用者請你「做一張圖／賀卡」並在某個時間傳給某人時，照這個流程：
+1. 弄清楚：圖片要畫什麼、傳給誰、什麼時候傳。圖片形狀預設「直式」，使用者說要方形或橫式才改。
+2. 先說「好，我來畫，大約需要十幾秒，請稍等」，然後呼叫 create_card_image。
+   prompt 請寫成詳細的畫面描述（主題、構圖、風格、色調、氣氛）。如果圖上要有文字，請用繁體中文，並用「」標明確切文字，文字盡量簡短。
+3. 圖片完成後會顯示在使用者的畫面上。請說「圖片好了，請看一下畫面，滿意嗎？要重做或修改哪裡嗎？」
+4. 使用者要重做或修改，就依照他的意思調整 prompt，再呼叫一次 create_card_image（每次都會產生新圖片）。
+5. 使用者滿意後，幫他擬一句要跟圖片一起傳出的祝福文字（一兩句，例如「中秋節快樂！祝闔家團圓、平安喜樂」），念給他聽並確認，可以依他的意思修改。
+6. 最後把「日期（含星期幾）、時間、傳給誰、祝福文字」完整念一次，問「對嗎？」。使用者同意後，才呼叫 schedule_card，image_id 用最後一張他滿意的圖片。
+7. 如果日期已經過了（例如今年的節日已過），要提醒使用者並問是不是明年。
+
 【其他功能】
-- 使用者想知道有哪些提醒，呼叫 list_reminders。
+- 使用者想知道有哪些提醒（含圖片賀卡），呼叫 list_reminders。
 - 使用者想取消提醒，先呼叫 list_reminders 找到是哪一則，念給他確認後，再呼叫 cancel_reminder。
 
 【提醒內容的寫法】
@@ -140,13 +152,40 @@ const TOOLS = [
         },
       },
       {
+        name: 'create_card_image',
+        description: '用 AI 畫一張圖片（賀卡），完成後會顯示在使用者畫面上。每次呼叫都會產生一張新圖片。',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            prompt: { type: 'STRING', description: '詳細的畫面描述；圖上文字用繁體中文並以「」標明' },
+            shape: { type: 'STRING', enum: ['portrait', 'square', 'landscape'], description: '直式 portrait（預設）、方形 square、橫式 landscape' },
+          },
+          required: ['prompt'],
+        },
+      },
+      {
+        name: 'schedule_card',
+        description: '在使用者確認圖片、祝福文字、時間與對象後，排定時間把圖片賀卡傳到對方 LINE。',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            image_id: { type: 'STRING', description: 'create_card_image 回傳的 image_id' },
+            recipient: { type: 'STRING', description: '傳給誰：「我」或名單上的名字' },
+            greeting: { type: 'STRING', description: '跟圖片一起傳的祝福文字' },
+            due_at: { type: 'STRING', description: '傳送時間，台灣時間，格式 YYYY-MM-DD HH:mm。使用 in_minutes 時可省略' },
+            in_minutes: { type: 'INTEGER', description: '幾分鐘後傳送' },
+          },
+          required: ['image_id', 'recipient', 'greeting'],
+        },
+      },
+      {
         name: 'list_reminders',
-        description: '列出所有還沒送出的提醒。',
+        description: '列出所有還沒送出的提醒與圖片賀卡。',
         parameters: { type: 'OBJECT', properties: {} },
       },
       {
         name: 'cancel_reminder',
-        description: '取消一則還沒送出的提醒。',
+        description: '取消一則還沒送出的提醒或圖片賀卡。',
         parameters: {
           type: 'OBJECT',
           properties: { reminder_id: { type: 'INTEGER', description: 'list_reminders 回傳的提醒編號' } },
@@ -232,40 +271,58 @@ export async function createVoiceSession(env) {
 export async function runVoiceTool(env, name, args, now = Date.now()) {
   const ownerName = env.OWNER_NAME || 'froglssh';
 
-  if (name === 'create_reminder') {
+  if (name === 'create_reminder' || name === 'schedule_card') {
     const contacts = await loadContacts(env);
     const contact = findContact(contacts, args.recipient, ownerName);
     if (!contact) {
       const names = contacts.filter((c) => !c.blocked).map((c) => (c.is_self ? '我' : c.name || c.line_display_name));
-      return { ok: false, error: `名單上找不到「${args.recipient}」。目前可以提醒的對象：${names.join('、') || '（沒有）'}` };
+      return { ok: false, error: `名單上找不到「${args.recipient}」。目前可以傳送的對象：${names.join('、') || '（沒有）'}` };
     }
     const minutes = Number(args.in_minutes);
     const dueAt = Number.isFinite(minutes) && minutes > 0 ? now + minutes * 60 * 1000 : parseTaipei(args.due_at);
     if (!Number.isFinite(dueAt)) return { ok: false, error: '時間格式不正確，請用 YYYY-MM-DD HH:mm 或 in_minutes' };
 
-    const result = await insertReminder(env, { message: args.message, contactId: contact.id, dueAt });
+    let imageKey = null;
+    if (name === 'schedule_card') {
+      imageKey = String(args.image_id ?? '');
+      if (!(await imageExists(env, imageKey))) return { ok: false, error: '找不到這張圖片，請重新畫一張' };
+    }
+    const message = name === 'schedule_card' ? args.greeting : args.message;
+    const result = await insertReminder(env, { message, contactId: contact.id, dueAt, imageKey });
     if (result.error) return { ok: false, error: result.error };
     const r = result.reminder;
     return {
       ok: true,
-      reminder: { id: r.id, message: r.message, recipient: r.contactIsSelf ? '我' : r.contactName, due: formatTaipei(r.dueAt) },
+      reminder: { id: r.id, message: r.message, recipient: r.contactIsSelf ? '我' : r.contactName, due: formatTaipei(r.dueAt), imageUrl: r.imageUrl },
     };
+  }
+
+  if (name === 'create_card_image') {
+    const result = await generateImage(env, { prompt: args.prompt, shape: args.shape }, now);
+    if (result.error) return { ok: false, error: result.error };
+    return { ok: true, image_id: result.key, image_url: result.url, note: '圖片已顯示在使用者畫面上' };
   }
 
   if (name === 'list_reminders') {
     const { results } = await env.DB.prepare(
-      `SELECT r.id, r.message, r.due_at, c.is_self, COALESCE(c.name, c.line_display_name) AS who
+      `SELECT r.id, r.message, r.due_at, r.image_key, c.is_self, COALESCE(c.name, c.line_display_name) AS who
        FROM reminders r LEFT JOIN contacts c ON c.id = r.contact_id
-       WHERE r.status = 'pending' ORDER BY r.due_at LIMIT 30`,
+       WHERE r.status IN ('pending', 'card') ORDER BY r.due_at LIMIT 30`,
     ).all();
     return {
       ok: true,
-      reminders: results.map((r) => ({ id: r.id, message: r.message, recipient: r.is_self ? '我' : r.who, due: formatTaipei(r.due_at) })),
+      reminders: results.map((r) => ({
+        id: r.id,
+        type: r.image_key ? '圖片賀卡' : '文字提醒',
+        message: r.message,
+        recipient: r.is_self ? '我' : r.who,
+        due: formatTaipei(r.due_at),
+      })),
     };
   }
 
   if (name === 'cancel_reminder') {
-    const res = await env.DB.prepare("DELETE FROM reminders WHERE id = ? AND status = 'pending'")
+    const res = await env.DB.prepare("DELETE FROM reminders WHERE id = ? AND status IN ('pending', 'card')")
       .bind(Number(args.reminder_id))
       .run();
     return res.meta.changes ? { ok: true } : { ok: false, error: '找不到這則提醒，可能已經送出或刪除了' };

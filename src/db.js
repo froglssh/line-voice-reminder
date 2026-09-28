@@ -33,16 +33,41 @@ const SCHEMA = [
     count INTEGER NOT NULL,
     first_at INTEGER NOT NULL
   )`,
+  // AI 生成的圖片（JPEG），以難以猜測的 key 公開給 LINE 下載
+  `CREATE TABLE IF NOT EXISTS images (
+    key TEXT PRIMARY KEY,
+    data BLOB NOT NULL,
+    mime TEXT NOT NULL,
+    prompt TEXT,
+    created_at INTEGER NOT NULL
+  )`,
 ];
+
+// 舊資料表補欄位：reminders.image_key（有值代表這是一張圖片賀卡）
+async function migrate(db) {
+  const { results } = await db.prepare('PRAGMA table_info(reminders)').all();
+  if (!results.some((c) => c.name === 'image_key')) {
+    await db
+      .prepare('ALTER TABLE reminders ADD COLUMN image_key TEXT')
+      .run()
+      .catch((err) => {
+        // 另一個程序剛好同時加過了
+        if (!/duplicate column/i.test(err.message)) throw err;
+      });
+  }
+}
 
 let schemaReady = null;
 
 export function ensureSchema(db) {
   if (!schemaReady) {
-    schemaReady = db.batch(SCHEMA.map((sql) => db.prepare(sql))).catch((err) => {
-      schemaReady = null;
-      throw err;
-    });
+    schemaReady = db
+      .batch(SCHEMA.map((sql) => db.prepare(sql)))
+      .then(() => migrate(db))
+      .catch((err) => {
+        schemaReady = null;
+        throw err;
+      });
   }
   return schemaReady;
 }
@@ -69,6 +94,7 @@ export function reminderToJson(row) {
     dueAt: row.due_at,
     status: row.status,
     lastError: row.last_error,
+    imageUrl: row.image_key ? `/img/${row.image_key}.jpg` : null,
     sentAt: row.sent_at,
     createdAt: row.created_at,
   };

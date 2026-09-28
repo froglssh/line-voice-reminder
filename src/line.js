@@ -30,8 +30,12 @@ export async function verifySignature(env, rawBody, signature) {
   return diff === 0;
 }
 
+export function pushText(env, to, text) {
+  return pushMessages(env, to, [{ type: 'text', text }]);
+}
+
 // 回傳 { ok: true } 或 { ok: false, permanent, reason }
-export async function pushText(env, to, text) {
+export async function pushMessages(env, to, messages) {
   if (!env.LINE_CHANNEL_ACCESS_TOKEN) {
     return { ok: false, permanent: true, reason: '尚未設定 LINE 金鑰' };
   }
@@ -40,7 +44,7 @@ export async function pushText(env, to, text) {
     res = await fetch(`${base(env)}/v2/bot/message/push`, {
       method: 'POST',
       headers: authHeaders(env),
-      body: JSON.stringify({ to, messages: [{ type: 'text', text }] }),
+      body: JSON.stringify({ to, messages }),
     });
   } catch (err) {
     return { ok: false, permanent: false, reason: `連不上 LINE：${err.message}` };

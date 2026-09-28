@@ -4,7 +4,8 @@ import qrcode from 'qrcode-generator';
 import { ensureSchema, contactToJson, reminderToJson } from './db.js';
 import { isLoggedIn, login, logout } from './auth.js';
 import { handleWebhook, getBotInfo } from './line.js';
-import { sendDueReminders, cleanup } from './scheduler.js';
+import { sendDueReminders, sendNow, cleanup } from './scheduler.js';
+import { serveImage } from './images.js';
 import { insertReminder } from './reminders.js';
 import { createVoiceSession, runVoiceTool } from './voice.js';
 
@@ -83,6 +84,13 @@ async function handleApi(request, env, url) {
   if (pathname === '/api/reminders' && method === 'GET') return json(await listReminders(env));
   if (pathname === '/api/reminders' && method === 'POST') return createReminder(env, await readJson(request));
 
+  const sendMatch = pathname.match(/^\/api\/reminders\/(\d+)\/send$/);
+  if (sendMatch && method === 'POST') {
+    const result = await sendNow(env, Number(sendMatch[1]), url.origin);
+    if (!result) return json({ error: '這則提醒正在傳送中或已不存在' }, 409);
+    return result.status === 'sent' ? json({ ok: true }) : json({ error: result.last_error || '傳送失敗' }, 502);
+  }
+
   const reminderMatch = pathname.match(/^\/api\/reminders\/(\d+)$/);
   if (reminderMatch && method === 'DELETE') {
     // 正在傳送中的提醒不能刪，其他狀態都可以
@@ -132,10 +140,13 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     try {
-      if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/line/')) {
+      if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/line/') || url.pathname.startsWith('/img/')) {
         await ensureSchema(env.DB);
       }
       if (url.pathname === '/line/webhook' && request.method === 'POST') return handleWebhook(request, env);
+      const img = url.pathname.match(/^\/img\/([0-9a-f]{32})\.jpg$/);
+      if (img && request.method === 'GET') return serveImage(env, img[1]);
+      if (url.pathname.startsWith('/img/')) return new Response('not found', { status: 404 });
       if (url.pathname.startsWith('/api/')) return handleApi(request, env, url);
       return env.ASSETS.fetch(request);
     } catch (err) {

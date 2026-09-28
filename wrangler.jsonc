@@ -10,7 +10,7 @@
     "directory": "./public",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/line/*"]
+    "run_worker_first": ["/api/*", "/line/*", "/img/*"]
   },
   "d1_databases": [
     { "binding": "DB", "database_name": "froglssh-reminder" }
@@ -26,7 +26,13 @@
     "LINE_API_BASE": "https://api.line.me",
     // 語音 AI 模型與聲音（Kore 為女聲；可改成 Puck、Charon 等）
     "GEMINI_MODEL": "gemini-3.8-live",
-    "GEMINI_VOICE": "Kore"
+    "GEMINI_VOICE": "Kore",
+    // 網站正式網址：排程傳送圖片時，LINE 會從這裡下載圖片
+    "PUBLIC_BASE_URL": "https://line-voice-reminder.frog-cbd.workers.dev",
+    // AI 圖片：OpenAI ChatGPT Images 模型、品質（low / medium / high）、每日上限（控制花費）
+    "OPENAI_IMAGE_MODEL": "gpt-image-2.5-flare",
+    "OPENAI_IMAGE_QUALITY": "medium",
+    "IMAGE_DAILY_LIMIT": "20"
   },
   "observability": { "enabled": true }
 }
