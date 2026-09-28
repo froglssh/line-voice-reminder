@@ -1,5 +1,7 @@
 // 網頁畫面的主程式：登入、提醒清單、聯絡人、邀請 QR Code。
 
+import { VoiceSession } from './voice.js';
+
 const $ = (sel) => document.querySelector(sel);
 const TZ = 'Asia/Taipei';
 
@@ -97,6 +99,7 @@ $('#login-form').addEventListener('submit', async (e) => {
 });
 
 $('#logout').addEventListener('click', async () => {
+  voice?.stop();
   await api('/api/logout', { method: 'POST' }).catch(() => {});
   showLogin();
 });
@@ -299,10 +302,44 @@ async function loadInvite() {
   }
 }
 
-// ---------- 麥克風（語音功能於下一階段加入） ----------
+// ---------- 麥克風與語音對話 ----------
+
+let voice = null;
+
+function setMicState(stateName, text) {
+  const mic = $('#mic');
+  mic.dataset.state = stateName;
+  mic.setAttribute('aria-pressed', String(stateName !== 'idle'));
+  mic.setAttribute('aria-label', stateName === 'idle' ? '開始語音對話' : '結束語音對話');
+  $('#mic-status').textContent = text;
+  if (stateName === 'idle') {
+    voice = null;
+    $('#caption').textContent = '';
+  }
+}
 
 $('#mic').addEventListener('click', () => {
-  toast('語音對話功能即將開放，目前請先用「用打字新增提醒」');
+  if (voice) {
+    voice.stop();
+    return;
+  }
+  voice = new VoiceSession({
+    onState: setMicState,
+    onCaption: (who, text) => {
+      const el = $('#caption');
+      el.dataset.who = who;
+      el.textContent = text;
+    },
+    onReminderChange: async (name, result) => {
+      await loadReminders().catch(() => {});
+      if (name === 'create_reminder' && result.reminder) {
+        toast(`已建立：${result.reminder.due} 提醒${result.reminder.recipient}`);
+      }
+      if (name === 'cancel_reminder') toast('已取消提醒');
+    },
+    onError: (message) => toast(message),
+  });
+  voice.start();
 });
 
 // ---------- 啟動 ----------

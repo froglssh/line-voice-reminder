@@ -21,7 +21,10 @@
     "OWNER_NAME": "froglssh",
     // 已送出的提醒保留多久（分鐘）。10080 = 7 天；測試自動刪除時可暫時改成 3
     "RETENTION_MINUTES": "10080",
-    "LINE_API_BASE": "https://api.line.me"
+    "LINE_API_BASE": "https://api.line.me",
+    // 語音 AI 模型與聲音（Kore 為女聲；可改成 Puck、Charon 等）
+    "GEMINI_MODEL": "gemini-3.8-live",
+    "GEMINI_VOICE": "Kore"
   },
   "observability": { "enabled": true }
 }

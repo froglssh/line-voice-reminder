@@ -5,9 +5,8 @@ import { ensureSchema, contactToJson, reminderToJson } from './db.js';
 import { isLoggedIn, login, logout } from './auth.js';
 import { handleWebhook, getBotInfo } from './line.js';
 import { sendDueReminders, cleanup } from './scheduler.js';
-
-const MAX_MESSAGE_LENGTH = 500;
-const MAX_FUTURE_MS = 5 * 365 * 24 * 60 * 60 * 1000;
+import { insertReminder } from './reminders.js';
+import { createVoiceSession, runVoiceTool } from './voice.js';
 
 function json(body, status = 200, headers = {}) {
   return new Response(JSON.stringify(body), {
@@ -34,29 +33,12 @@ async function listReminders(env) {
 }
 
 async function createReminder(env, body) {
-  const message = String(body.message ?? '').trim();
-  const contactId = Number(body.contactId);
-  const dueAt = Number(body.dueAt);
-  const now = Date.now();
-
-  if (!message) return json({ error: '請填寫提醒內容' }, 400);
-  if (message.length > MAX_MESSAGE_LENGTH) return json({ error: `提醒內容請少於 ${MAX_MESSAGE_LENGTH} 字` }, 400);
-  if (!Number.isFinite(dueAt)) return json({ error: '提醒時間格式不正確' }, 400);
-  if (dueAt < now - 60 * 1000) return json({ error: '提醒時間已經過了，請選擇未來的時間' }, 400);
-  if (dueAt > now + MAX_FUTURE_MS) return json({ error: '提醒時間太遠了（最多 5 年內）' }, 400);
-
-  const contact = await env.DB.prepare('SELECT * FROM contacts WHERE id = ?').bind(contactId).first();
-  if (!contact) return json({ error: '找不到這位收件人' }, 400);
-  if (contact.blocked) return json({ error: '這位收件人已封鎖提醒小幫手，無法傳送' }, 400);
-
-  const row = await env.DB.prepare(
-    'INSERT INTO reminders (message, contact_id, due_at, created_at) VALUES (?, ?, ?, ?) RETURNING *',
-  )
-    .bind(message, contactId, Math.round(dueAt), now)
-    .first();
-  row.contact_name = contact.name || contact.line_display_name;
-  row.contact_is_self = contact.is_self;
-  return json(reminderToJson(row), 201);
+  const result = await insertReminder(env, {
+    message: body.message,
+    contactId: Number(body.contactId),
+    dueAt: Number(body.dueAt),
+  });
+  return result.error ? json({ error: result.error }, 400) : json(result.reminder, 201);
 }
 
 async function updateContact(env, id, body) {
@@ -108,6 +90,15 @@ async function handleApi(request, env, url) {
       .bind(Number(reminderMatch[1]))
       .run();
     return res.meta.changes ? json({ ok: true }) : json({ error: '這則提醒正在傳送中或已不存在' }, 409);
+  }
+
+  if (pathname === '/api/voice/session' && method === 'POST') {
+    const result = await createVoiceSession(env);
+    return json(result.body, result.status);
+  }
+  if (pathname === '/api/voice/tool' && method === 'POST') {
+    const body = await readJson(request);
+    return json(await runVoiceTool(env, String(body.name || ''), body.args || {}));
   }
 
   if (pathname === '/api/contacts' && method === 'GET') {
