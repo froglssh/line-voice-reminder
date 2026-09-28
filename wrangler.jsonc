@@ -1,0 +1,27 @@
+{
+  // Cloudflare Worker 設定檔：網頁、API、LINE webhook、每分鐘排程都在同一個 Worker
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "papaya-reminder",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/line/*"]
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "papaya-reminder" }
+  ],
+  "triggers": {
+    // 每分鐘檢查一次到期提醒，並清除過期資料
+    "crons": ["* * * * *"]
+  },
+  "vars": {
+    "OWNER_NAME": "Papaya",
+    // 已送出的提醒保留多久（分鐘）。10080 = 7 天；測試自動刪除時可暫時改成 3
+    "RETENTION_MINUTES": "10080",
+    "LINE_API_BASE": "https://api.line.me"
+  },
+  "observability": { "enabled": true }
+}
