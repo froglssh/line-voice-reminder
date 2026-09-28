@@ -108,7 +108,7 @@ export async function handleWebhook(request, env) {
       await replyText(
         env,
         ev.replyToken,
-        `嗨${profile?.displayName ? ` ${profile.displayName}` : ''}！我是 ${env.OWNER_NAME || 'Papaya'} 的提醒小幫手，之後會在這裡傳提醒給你 ⏰`,
+        `嗨${profile?.displayName ? ` ${profile.displayName}` : ''}！我是 ${env.OWNER_NAME || 'froglssh'} 的提醒小幫手，之後會在這裡傳提醒給你 ⏰`,
       );
     } else if (ev.type === 'unfollow') {
       await env.DB.prepare('UPDATE contacts SET blocked = 1 WHERE line_user_id = ?').bind(userId).run();

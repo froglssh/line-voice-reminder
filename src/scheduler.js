@@ -7,7 +7,7 @@ const STUCK_MS = 5 * 60 * 1000;
 
 export function formatMessage(env, reminder, contact) {
   const text = `⏰ 提醒：${reminder.message}`;
-  return contact.is_self ? text : `${text}\n—— 來自 ${env.OWNER_NAME || 'Papaya'}`;
+  return contact.is_self ? text : `${text}\n—— 來自 ${env.OWNER_NAME || 'froglssh'}`;
 }
 
 async function markFailed(env, reminder, reason, contact) {
